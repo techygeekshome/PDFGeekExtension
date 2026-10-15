@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PDFGeek: PDF Tools</title>
+<link rel="icon" href="icons/icon32.png">
+<link rel="stylesheet" href="app.css">
+<script src="lib/pdf-lib.min.js"></script>
+<script src="zip.js"></script>
+<script type="module" src="app.js"></script>
+</head>
+<body>
+<header class="top">
+  <img src="icons/icon48.png" alt="" width="36" height="36">
+  <div>
+    <div class="brand">PDFGeek</div>
+    <div class="tag">PDF tools that work on your computer</div>
+  </div>
+  <div class="local" title="PDFGeek has no server. Your files are read and written inside this tab.">
+    <span class="dot"></span> Your files never leave this computer
+  </div>
+</header>
+
+<div class="layout">
+  <nav id="nav" aria-label="Tools">
+    <button data-tool="merge" class="on"><b>Merge</b><span>Join PDFs into one</span></button>
+    <button data-tool="split"><b>Split</b><span>Pull pages out into new files</span></button>
+    <button data-tool="organize"><b>Organise pages</b><span>Reorder, rotate, delete</span></button>
+    <button data-tool="images"><b>Images to PDF</b><span>JPG, PNG and WebP</span></button>
+    <button data-tool="protect"><b>Add a password</b><span>AES-256 encryption</span></button>
+    <button data-tool="unlock"><b>Remove a password</b><span>When you know it</span></button>
+    <button data-tool="shrink"><b>Shrink</b><span>Lossless size savings</span></button>
+  </nav>
+
+  <main>
+    <!-- fetch from a right-clicked link -->
+    <section id="fetchCard" class="card fetch" hidden>
+      <div>
+        <b>Open this PDF?</b>
+        <div class="muted small" id="fetchUrl"></div>
+        <div class="note" id="fetchNote">PDFGeek needs your OK to download it from <b id="fetchHost"></b>. It is only read, never sent anywhere.</div>
+      </div>
+      <div class="row">
+        <button id="fetchGo" class="primary-sm">Allow and open</button>
+        <button id="fetchNo">Cancel</button>
+      </div>
+    </section>
+
+    <!-- MERGE -->
+    <section class="tool" id="t-merge">
+      <h1>Merge PDFs</h1>
+      <p class="lead">Add two or more PDFs, drag them into order, then merge them into one file.</p>
+      <div class="drop" data-accept="pdf" data-multi="1" data-for="merge">
+        <input type="file" accept="application/pdf,.pdf" multiple>
+        <b>Drop PDFs here</b> or <span class="link">choose files</span>
+      </div>
+      <ol class="files" id="mergeList"></ol>
+      <div class="actions">
+        <button class="primary" id="mergeGo" disabled>Merge PDFs</button>
+        <button id="mergeClear" hidden>Clear</button>
+      </div>
+    </section>
+
+    <!-- SPLIT -->
+    <section class="tool" id="t-split" hidden>
+      <h1>Split a PDF</h1>
+      <p class="lead">Save every page as its own file, or pick the pages you want.</p>
+      <div class="drop" data-accept="pdf" data-for="split">
+        <input type="file" accept="application/pdf,.pdf">
+        <b>Drop a PDF here</b> or <span class="link">choose a file</span>
+      </div>
+      <div id="splitBody" hidden>
+        <div class="filehead" id="splitHead"></div>
+        <div class="opts">
+          <label class="radio"><input type="radio" name="splitMode" value="each" checked> Every page as its own file</label>
+          <label class="radio"><input type="radio" name="splitMode" value="ranges"> Pages I choose</label>
+          <div class="indent" id="rangeBox">
+            <input type="text" id="ranges" placeholder="For example 1-3, 5, 8-10" spellcheck="false" autocomplete="off">
+            <label class="check"><input type="checkbox" id="oneFile"> Put them all in one file</label>
+            <div class="note">Each range becomes its own file. Use a dash for a run of pages and commas between ranges. "7-" means page 7 to the end.</div>
+          </div>
+          <label class="radio"><input type="radio" name="splitMode" value="every"> A new file every <input type="number" id="everyN" value="2" min="1" max="9999"> pages</label>
+        </div>
+        <div class="note bad" id="splitErr"></div>
+        <div class="actions"><button class="primary" id="splitGo">Split PDF</button></div>
+      </div>
+    </section>
+
+    <!-- ORGANISE -->
+    <section class="tool" id="t-organize" hidden>
+      <h1>Organise pages</h1>
+      <p class="lead">Drag pages into a new order, turn them the right way up, and remove the ones you do not need.</p>
+      <div class="drop" data-accept="pdf" data-for="organize">
+        <input type="file" accept="application/pdf,.pdf">
+        <b>Drop a PDF here</b> or <span class="link">choose a file</span>
+      </div>
+      <div id="orgBody" hidden>
+        <div class="filehead" id="orgHead"></div>
+        <div class="toolbar">
+          <button id="orgRotAll">Rotate all right</button>
+          <button id="orgReverse">Reverse order</button>
+          <button id="orgReset">Undo all changes</button>
+          <span class="muted small" id="orgCount"></span>
+        </div>
+        <div class="grid" id="orgGrid"></div>
+        <div class="actions sticky"><button class="primary" id="orgGo">Save PDF</button></div>
+      </div>
+    </section>
+
+    <!-- IMAGES -->
+    <section class="tool" id="t-images" hidden>
+      <h1>Images to PDF</h1>
+      <p class="lead">Turn photos and screenshots into one PDF, one picture per page.</p>
+      <div class="drop" data-accept="image" data-multi="1" data-for="images">
+        <input type="file" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" multiple>
+        <b>Drop JPG, PNG or WebP pictures here</b> or <span class="link">choose files</span>
+      </div>
+      <ol class="files" id="imgList"></ol>
+      <div class="opts inline" id="imgOpts">
+        <label>Page size
+          <select id="imgSize"><option value="a4">A4</option><option value="letter">Letter</option><option value="fit">Same as the picture</option></select>
+        </label>
+        <label>Orientation
+          <select id="imgOrient"><option value="auto">Match each picture</option><option value="portrait">Portrait</option><option value="landscape">Landscape</option></select>
+        </label>
+        <label>Margins
+          <select id="imgMargin"><option value="0">None</option><option value="10">Small (10 mm)</option><option value="20">Large (20 mm)</option></select>
+        </label>
+      </div>
+      <div class="actions">
+        <button class="primary" id="imgGo" disabled>Make PDF</button>
+        <button id="imgClear" hidden>Clear</button>
+      </div>
+    </section>
+
+    <!-- PROTECT -->
+    <section class="tool" id="t-protect" hidden>
+      <h1>Add a password</h1>
+      <p class="lead">Lock a PDF so it only opens with your password. It uses AES-256, the strongest encryption PDFs support, and works in every modern PDF reader.</p>
+      <div class="drop" data-accept="pdf" data-for="protect">
+        <input type="file" accept="application/pdf,.pdf">
+        <b>Drop a PDF here</b> or <span class="link">choose a file</span>
+      </div>
+      <div id="protBody" hidden>
+        <div class="filehead" id="protHead"></div>
+        <div class="opts">
+          <label class="field">Password <input type="password" id="pw1" autocomplete="new-password"></label>
+          <label class="field">Type it again <input type="password" id="pw2" autocomplete="new-password"></label>
+          <label class="check"><input type="checkbox" id="pwShow"> Show password</label>
+          <div class="note" id="pwHint">Use at least 8 characters. A short sentence is easy to remember and hard to guess.</div>
+          <div class="note warn">Keep the password safe. There is no way to get it back, not even for us.</div>
+        </div>
+        <div class="note bad" id="protErr"></div>
+        <div class="actions"><button class="primary" id="protGo">Add password</button></div>
+      </div>
+    </section>
+
+    <!-- UNLOCK -->
+    <section class="tool" id="t-unlock" hidden>
+      <h1>Remove a password</h1>
+      <p class="lead">Already know the password? Save a copy that opens without it.</p>
+      <div class="drop" data-accept="pdf" data-for="unlock">
+        <input type="file" accept="application/pdf,.pdf">
+        <b>Drop a PDF here</b> or <span class="link">choose a file</span>
+      </div>
+      <div id="unlBody" hidden>
+        <div class="filehead" id="unlHead"></div>
+        <div class="opts" id="unlPwBox">
+          <label class="field">Password <input type="password" id="unlPw" autocomplete="off"></label>
+        </div>
+        <div class="note bad" id="unlErr"></div>
+        <div class="actions"><button class="primary" id="unlGo">Remove password</button></div>
+      </div>
+    </section>
+
+    <!-- SHRINK -->
+    <section class="tool" id="t-shrink" hidden>
+      <h1>Shrink a PDF</h1>
+      <p class="lead">Repacks the file to save space without touching quality. Text-heavy and badly saved PDFs often get much smaller. Scans and photos are already compressed, so they will not shrink much.</p>
+      <div class="drop" data-accept="pdf" data-for="shrink">
+        <input type="file" accept="application/pdf,.pdf">
+        <b>Drop a PDF here</b> or <span class="link">choose a file</span>
+      </div>
+      <div id="shrBody" hidden>
+        <div class="filehead" id="shrHead"></div>
+        <div class="actions"><button class="primary" id="shrGo">Shrink PDF</button></div>
+      </div>
+    </section>
+
+    <section id="busy" class="card busy" hidden><span class="spin"></span><span id="busyText">Working...</span></section>
+    <section id="result" class="card result" hidden></section>
+    <section id="error" class="card error" hidden></section>
+  </main>
+</div>
+
+<footer>
+  <span>PDFGeek reads and writes your files inside this tab. Nothing is uploaded, there is no account and no tracking.</span>
+  <a href="https://techygeekshome.info/browser-extensions/pdfgeek/" target="_blank" rel="noopener">techygeekshome.info</a>
+</footer>
+
+<dialog id="pwDialog">
+  <form method="dialog">
+    <h2>This PDF has a password</h2>
+    <p class="muted" id="pwDlgFile"></p>
+    <label class="field">Password <input type="password" id="pwDlgInput" autocomplete="off"></label>
+    <div class="note bad" id="pwDlgErr"></div>
+    <div class="row end">
+      <button value="cancel" id="pwDlgCancel">Cancel</button>
+      <button value="ok" class="primary-sm" id="pwDlgOk">Open</button>
+    </div>
+  </form>
+</dialog>
+</body>
+</html>
