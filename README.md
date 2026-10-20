@@ -1,6 +1,6 @@
 # PDFGeek: PDF Tools
 
-Merge, split, reorder, rotate and password protect PDFs, and turn pictures into PDFs, all inside your browser. Your files are never uploaded anywhere.
+Merge, split, crop, reorder, rotate and password protect PDFs, and turn pictures into PDFs, all inside your browser. Your files are never uploaded anywhere.
 
 **Download and full guide:** https://techygeekshome.info/browser-extensions/pdfgeek/
 
@@ -11,6 +11,7 @@ Click the PDFGeek icon and a PDFGeek tab opens with these tools:
 - **Merge**: add two or more PDFs, drag them into order, and join them into one file.
 - **Split**: save every page as its own file, pick ranges such as `1-3, 5, 8-`, or start a new file every few pages. Several files come in one ZIP.
 - **Organise pages**: see every page, drag pages into a new order, turn them the right way up and remove the ones you do not need.
+- **Crop**: cut pages down to the part you need, such as a postage label (Vinted, eBay, Evri, InPost and others) printed in one corner of an A4 page. Drag a box on the page, pick a half or a quarter, or trim the white edges. Save it at the cropped size, or fitted to 4 x 6 inch thermal label paper, A6 or A4, turned to fit. Text and barcodes stay sharp. Cropping hides the rest of the page: it is still inside the file, so use it to tidy pages, not to remove private details.
 - **Images to PDF**: JPG, PNG and WebP pictures, one per page, on A4, Letter or a page the same size as the picture, with or without margins. Phone photos are turned the right way up, and JPG photos go in as they are, with no loss of quality.
 - **Add a password**: lock a PDF with AES-256, the strongest encryption PDFs support. It opens in any modern PDF reader, and only with the password (tested with the PDF readers built into Chrome, Edge and Firefox, plus poppler and qpdf).
 - **Remove a password**: when you know the password, save a copy that opens without it.

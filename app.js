@@ -26,7 +26,7 @@ const baseName = (n) => (n || 'document').replace(/\.[a-z0-9]{1,5}$/i, '').repla
 const pad = (n, w) => String(n).padStart(w, '0');
 
 // ---------- settings (per viewer, on this computer) ----------
-const prefs = { tool: 'merge', imgSize: 'a4', imgOrient: 'auto', imgMargin: '0' };
+const prefs = { tool: 'merge', imgSize: 'a4', imgOrient: 'auto', imgMargin: '0', cropOut: 'crop', cropTurn: true };
 const savePrefs = () => chrome.storage.local.set({ prefs }).catch(() => {});
 
 // ---------- status cards ----------
@@ -391,6 +391,178 @@ async function doOrganize() {
   finally { idle(); }
 }
 
+// ---------- CROP ----------
+// Boxes are kept as fractions (0 to 1) of the page as it is shown (after its /Rotate), so the same box fits
+// pages of different sizes. They are turned into PDF points only when saving.
+const crop = { src: null, js: null, n: 0, all: true, shared: null, boxes: [], canvas: null, vp: null, scale: 1 };
+const WHOLE = () => ({ x0: 0, y0: 0, x1: 1, y1: 1 });
+const PAPER = { '4x6': [288, 432], a6: [297.64, 419.53], a4: [595.28, 841.89] };
+const PRESETS = { top: [0, 0, 1, .5], bottom: [0, .5, 1, 1], left: [0, 0, .5, 1], right: [.5, 0, 1, 1],
+  tl: [0, 0, .5, .5], tr: [.5, 0, 1, .5], bl: [0, .5, .5, 1], br: [.5, .5, 1, 1] };
+handlers.crop = async ([f]) => {
+  clearStatus(); busy(`Reading ${f.name}...`);
+  try {
+    if (crop.js) crop.js.destroy();
+    crop.src = await readPdf(f);
+    crop.js = await pdfjsDoc(crop.src.bytes);
+    crop.n = 0; crop.shared = WHOLE(); crop.boxes = new Array(crop.src.pages).fill(null);
+    drawHead('#cropHead', crop.src); $('#cropBody').hidden = false;
+    await drawCropPage();
+  } catch (e) { showError(e.message); }
+  finally { idle(); }
+};
+const cropBoxOf = (i) => crop.all ? crop.shared : crop.boxes[i];
+function setCropBox(b) {
+  const c = (v) => Math.min(1, Math.max(0, v));
+  const n = { x0: c(Math.min(b.x0, b.x1)), y0: c(Math.min(b.y0, b.y1)), x1: c(Math.max(b.x0, b.x1)), y1: c(Math.max(b.y0, b.y1)) };
+  if (crop.all) crop.shared = n; else crop.boxes[crop.n] = n;
+  showCropBox();
+}
+async function drawCropPage() {
+  const page = await crop.js.getPage(crop.n + 1);
+  const v1 = page.getViewport({ scale: 1 });
+  const maxW = Math.max(280, Math.min(760, $('#t-crop .cropmain').clientWidth || 640)), maxH = 640;
+  const s = Math.min(maxW / v1.width, maxH / v1.height); const dpr = window.devicePixelRatio || 1;
+  const vp = page.getViewport({ scale: s * dpr });
+  const c = h('canvas', { width: Math.ceil(vp.width), height: Math.ceil(vp.height) });
+  c.style.width = Math.round(v1.width * s) + 'px'; c.style.height = Math.round(v1.height * s) + 'px';
+  await page.render({ canvasContext: c.getContext('2d', { willReadFrequently: true }), viewport: vp }).promise;
+  page.cleanup();
+  crop.canvas = c; crop.vp = v1; crop.scale = s;
+  const st = $('#cropStage'); $$('canvas', st).forEach((x) => x.remove()); st.prepend(c);
+  $('#cropPageNo').textContent = `Page ${crop.n + 1} of ${crop.src.pages}`;
+  $('#cropPrev').disabled = crop.n === 0; $('#cropNext').disabled = crop.n >= crop.src.pages - 1;
+  showCropBox();
+}
+function showCropBox() {
+  if (!crop.canvas) return;
+  const b = cropBoxOf(crop.n), el = $('#cropBox');
+  const W = parseFloat(crop.canvas.style.width), H = parseFloat(crop.canvas.style.height);
+  el.hidden = !b;
+  if (b) Object.assign(el.style, { left: b.x0 * W + 'px', top: b.y0 * H + 'px', width: (b.x1 - b.x0) * W + 'px', height: (b.y1 - b.y0) * H + 'px' });
+  const shown = b || WHOLE();
+  const wp = (shown.x1 - shown.x0) * crop.vp.width, hp = (shown.y1 - shown.y0) * crop.vp.height;
+  $('#cropSize').textContent = `${b ? 'Crop' : 'Not cropped'}: ${Math.round(wp / MM)} x ${Math.round(hp / MM)} mm (${(wp / 72).toFixed(1)} x ${(hp / 72).toFixed(1)} in)`;
+  refreshButtons();
+}
+function wireCropStage() {
+  const st = $('#cropStage'); let drag = null;
+  const pos = (e) => { const r = crop.canvas.getBoundingClientRect(); return { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height }; };
+  st.addEventListener('pointerdown', (e) => {
+    if (!crop.canvas || e.button !== 0) return;
+    e.preventDefault(); st.setPointerCapture(e.pointerId);
+    const p = pos(e), b = cropBoxOf(crop.n); const hd = e.target.dataset?.h;
+    if (hd && b) drag = { mode: 'h', h: hd, b: { ...b } };
+    else if (b && e.target.closest('#cropBox')) drag = { mode: 'move', p, b: { ...b } };
+    else { drag = { mode: 'draw', p }; setCropBox({ x0: p.x, y0: p.y, x1: p.x, y1: p.y }); }
+  });
+  st.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    const p = pos(e); const c = (v) => Math.min(1, Math.max(0, v));
+    if (drag.mode === 'draw') setCropBox({ x0: drag.p.x, y0: drag.p.y, x1: c(p.x), y1: c(p.y) });
+    else if (drag.mode === 'move') {
+      const b = drag.b, w = b.x1 - b.x0, hh = b.y1 - b.y0;
+      const x0 = Math.min(1 - w, Math.max(0, b.x0 + p.x - drag.p.x)), y0 = Math.min(1 - hh, Math.max(0, b.y0 + p.y - drag.p.y));
+      setCropBox({ x0, y0, x1: x0 + w, y1: y0 + hh });
+    } else {
+      const b = { ...drag.b };
+      if (drag.h.includes('w')) b.x0 = c(p.x); if (drag.h.includes('e')) b.x1 = c(p.x);
+      if (drag.h.includes('n')) b.y0 = c(p.y); if (drag.h.includes('s')) b.y1 = c(p.y);
+      setCropBox(b);
+    }
+  });
+  const end = () => {
+    if (!drag) return; drag = null;
+    const b = cropBoxOf(crop.n);
+    // a click without a drag (or a tiny box) means the whole page again
+    if (b && ((b.x1 - b.x0) * crop.vp.width < 14 || (b.y1 - b.y0) * crop.vp.height < 14)) setCropBox(WHOLE());
+  };
+  st.addEventListener('pointerup', end); st.addEventListener('pointercancel', end);
+}
+// Shrinks the box to the printed area inside it (anything that is not near white), with a small margin.
+function trimCrop() {
+  const b = cropBoxOf(crop.n) || WHOLE(); const c = crop.canvas; const W = c.width, H = c.height;
+  const X0 = Math.floor(b.x0 * W), Y0 = Math.floor(b.y0 * H), X1 = Math.ceil(b.x1 * W), Y1 = Math.ceil(b.y1 * H);
+  const d = c.getContext('2d', { willReadFrequently: true }).getImageData(X0, Y0, Math.max(1, X1 - X0), Math.max(1, Y1 - Y0));
+  const w = d.width; let minX = Infinity, minY = Infinity, maxX = -1, maxY = -1;
+  for (let y = 0; y < d.height; y++) for (let x = 0; x < w; x++) {
+    const k = (y * w + x) * 4;
+    if (d.data[k + 3] > 40 && (d.data[k] < 225 || d.data[k + 1] < 225 || d.data[k + 2] < 225)) {
+      if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y;
+    }
+  }
+  if (maxX < 0) { showError('There is nothing printed inside the box to trim to.'); return; }
+  clearStatus();
+  const padX = 3 * MM / crop.vp.width, padY = 3 * MM / crop.vp.height; // 3 mm
+  setCropBox({ x0: (X0 + minX) / W - padX, y0: (Y0 + minY) / H - padY, x1: (X0 + maxX + 1) / W + padX, y1: (Y0 + maxY + 1) / H + padY });
+}
+async function doCrop() {
+  const src = crop.src; if (!src) return;
+  const outMode = $('#cropOut').value, turn = $('#cropTurn').checked, only = !crop.all && $('#cropOnly').checked;
+  const idx = src.doc.getPageIndices().filter((i) => !only || crop.boxes[i]);
+  if (!idx.length) { showError('No page has a crop yet. Draw a box on a page first.'); return; }
+  const t0 = performance.now(); busy('Cropping...');
+  try {
+    const out = await PDFDocument.create();
+    for (const i of idx) {
+      const f = cropBoxOf(i) || WHOLE();
+      const jp = await crop.js.getPage(i + 1); const vp = jp.getViewport({ scale: 1 });
+      const [ax, ay] = vp.convertToPdfPoint(f.x0 * vp.width, f.y0 * vp.height);
+      const [bx, by] = vp.convertToPdfPoint(f.x1 * vp.width, f.y1 * vp.height);
+      const L = Math.min(ax, bx), R = Math.max(ax, bx), B = Math.min(ay, by), T = Math.max(ay, by);
+      if (outMode === 'crop') {
+        // Lossless: the page keeps all its text and drawings, only the visible area changes.
+        const [pg] = await out.copyPages(src.doc, [i]);
+        for (const set of ['setMediaBox', 'setCropBox', 'setTrimBox', 'setBleedBox', 'setArtBox']) pg[set](L, B, R - L, T - B);
+        out.addPage(pg);
+      } else {
+        const [PW0, PH0] = PAPER[outMode];
+        const r0 = (((src.doc.getPage(i).getRotation().angle || 0) % 360) + 360) % 360;
+        const w0 = R - L, h0 = T - B;
+        const shownW = r0 % 180 ? h0 : w0, shownH = r0 % 180 ? w0 : h0;
+        // When it has to turn: a sideways page goes back to how it was drawn, otherwise it turns a quarter clockwise.
+        const needTurn = turn && (shownW > shownH) !== (PW0 > PH0) && Math.abs(shownW - shownH) > 1;
+        const extra = !needTurn ? 0 : r0 % 180 ? 360 - r0 : 90;
+        const tot = (r0 + extra) % 360;
+        const fw = tot % 180 ? h0 : w0, fh = tot % 180 ? w0 : h0;
+        const s = Math.min(PW0 / fw, PH0 / fh);
+        const W = w0 * s, H = h0 * s, tx = (PW0 - fw * s) / 2, ty = (PH0 - fh * s) / 2;
+        const emb = await out.embedPage(src.doc.getPage(i), { left: L, bottom: B, right: R, top: T });
+        const page = out.addPage([PW0, PH0]);
+        const at = { 0: [tx, ty, 0], 90: [tx, ty + W, -90], 180: [tx + W, ty + H, 180], 270: [tx + H, ty, 90] }[tot];
+        page.drawPage(emb, { x: at[0], y: at[1], width: W, height: H, rotate: degrees(at[2]) });
+      }
+      await sleep(0);
+    }
+    out.setProducer('PDFGeek'); out.setCreator('PDFGeek');
+    const bytes = await out.save();
+    const name = `${baseName(src.name)}-cropped.pdf`; const fl = { name, blob: pdfBlob(bytes) };
+    download(fl.blob, fl.name);
+    const what = { crop: 'at the cropped size', '4x6': 'on 4 x 6 inch label pages', a6: 'on A6 pages', a4: 'on A4 pages' }[outMode];
+    showResult(`Saved ${name}`, [`${plural(idx.length, 'page')} cropped and saved ${what} (${kb(bytes.length)}).`,
+      'Text and lines stay sharp: nothing is turned into a picture.'], [fl], performance.now() - t0);
+  } catch (e) { showError('Cropping failed: ' + (e.message || e)); }
+  finally { idle(); }
+}
+function wireCrop() {
+  wireCropStage();
+  $$('#t-crop [data-preset]').forEach((b) => b.addEventListener('click', () => { const [x0, y0, x1, y1] = PRESETS[b.dataset.preset]; setCropBox({ x0, y0, x1, y1 }); }));
+  $('#cropTrim').addEventListener('click', () => crop.canvas && trimCrop());
+  $('#cropReset').addEventListener('click', () => crop.canvas && setCropBox(WHOLE()));
+  $('#cropPrev').addEventListener('click', () => { if (crop.n > 0) { crop.n--; drawCropPage(); } });
+  $('#cropNext').addEventListener('click', () => { if (crop.src && crop.n < crop.src.pages - 1) { crop.n++; drawCropPage(); } });
+  $('#cropAll').addEventListener('change', (e) => {
+    crop.all = e.target.checked;
+    if (crop.all) crop.shared = crop.boxes[crop.n] || crop.shared || WHOLE();
+    else { crop.boxes = crop.boxes.map(() => null); crop.boxes[crop.n] = { ...crop.shared }; }
+    cropToggles(); showCropBox();
+  });
+  $('#cropOut').addEventListener('change', cropToggles);
+  $('#cropGo').addEventListener('click', doCrop);
+  cropToggles();
+}
+function cropToggles() { $('#cropTurnBox').hidden = $('#cropOut').value === 'crop'; $('#cropOnlyBox').hidden = crop.all; }
+
 // ---------- IMAGES TO PDF ----------
 const imgs = { items: [] };
 const MM = 72 / 25.4;
@@ -646,11 +818,15 @@ function refreshButtons() {
   $('#imgGo').textContent = imgs.items.length ? `Make PDF from ${plural(imgs.items.length, 'picture')}` : 'Make PDF';
   if (org.pages.length) $('#orgGo').disabled = !org.pages.some((p) => !p.del);
   if (unl.src) $('#unlGo').disabled = unl.src.status === 2;
+  if (crop.src) $('#cropGo').disabled = !crop.all && $('#cropOnly').checked && !crop.boxes.some(Boolean);
 }
 
 async function init() {
   try { Object.assign(prefs, (await chrome.storage.local.get('prefs')).prefs || {}); } catch { /* defaults */ }
-  for (const k of ['imgSize', 'imgOrient', 'imgMargin']) { const s = $('#' + k); s.value = prefs[k]; s.addEventListener('change', () => { prefs[k] = s.value; savePrefs(); }); }
+  $('#cropTurn').checked = prefs.cropTurn !== false;
+  $('#cropTurn').addEventListener('change', (e) => { prefs.cropTurn = e.target.checked; savePrefs(); });
+  wireCrop();
+  for (const k of ['imgSize', 'imgOrient', 'imgMargin', 'cropOut']) { const s = $('#' + k); s.value = prefs[k]; s.addEventListener('change', () => { prefs[k] = s.value; savePrefs(); }); }
   $$('#nav button').forEach((b) => b.addEventListener('click', () => showTool(b.dataset.tool)));
   wireDrops();
   sortable($('#mergeList'), 'li', () => merge.items, drawMerge);
@@ -680,5 +856,5 @@ async function init() {
   document.documentElement.dataset.ready = '1';
 }
 // for the automated tests
-globalThis.pdfgeek = { pdfjs: pdfjsLib, merge, split, org, imgs, prot, unl, shr, lastSaved, parseRanges, handlers, showTool };
+globalThis.pdfgeek = { pdfjs: pdfjsLib, merge, split, org, crop, setCropBox, trimCrop, imgs, prot, unl, shr, lastSaved, parseRanges, handlers, showTool };
 init();

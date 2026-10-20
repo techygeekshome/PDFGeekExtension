@@ -27,6 +27,7 @@
     <button data-tool="merge" class="on"><b>Merge</b><span>Join PDFs into one</span></button>
     <button data-tool="split"><b>Split</b><span>Pull pages out into new files</span></button>
     <button data-tool="organize"><b>Organise pages</b><span>Reorder, rotate, delete</span></button>
+    <button data-tool="crop"><b>Crop</b><span>Labels, margins, any area</span></button>
     <button data-tool="images"><b>Images to PDF</b><span>JPG, PNG and WebP</span></button>
     <button data-tool="protect"><b>Add a password</b><span>AES-256 encryption</span></button>
     <button data-tool="unlock"><b>Remove a password</b><span>When you know it</span></button>
@@ -105,6 +106,68 @@
         </div>
         <div class="grid" id="orgGrid"></div>
         <div class="actions sticky"><button class="primary" id="orgGo">Save PDF</button></div>
+      </div>
+    </section>
+
+    <!-- CROP -->
+    <section class="tool" id="t-crop" hidden>
+      <h1>Crop a PDF</h1>
+      <p class="lead">Cut a page down to the part you need, such as a postage label on a full A4 page. Drag a box over the page, or pick a quick option, then save it at its own size or ready for 4 x 6 inch label paper.</p>
+      <div class="drop" data-accept="pdf" data-for="crop">
+        <input type="file" accept="application/pdf,.pdf">
+        <b>Drop a PDF here</b> or <span class="link">choose a file</span>
+      </div>
+      <div id="cropBody" hidden>
+        <div class="filehead" id="cropHead"></div>
+        <div class="cropwrap">
+          <div class="cropside">
+            <div class="opts">
+              <b class="small">Quick crop</b>
+              <div class="presets">
+                <button data-preset="top">Top half</button>
+                <button data-preset="bottom">Bottom half</button>
+                <button data-preset="left">Left half</button>
+                <button data-preset="right">Right half</button>
+                <button data-preset="tl">Top left quarter</button>
+                <button data-preset="tr">Top right quarter</button>
+                <button data-preset="bl">Bottom left quarter</button>
+                <button data-preset="br">Bottom right quarter</button>
+              </div>
+              <button id="cropTrim" class="wide">Trim white edges</button>
+              <div class="note">Trim white edges shrinks the box to what is printed inside it. Pick a quick crop first if the page has other text on it.</div>
+              <button id="cropReset" class="wide">Whole page</button>
+            </div>
+            <div class="opts">
+              <label class="field">Save as
+                <select id="cropOut">
+                  <option value="crop">The cropped size</option>
+                  <option value="4x6">4 x 6 inch label (thermal printers)</option>
+                  <option value="a6">A6 (105 x 148 mm)</option>
+                  <option value="a4">A4, centred</option>
+                </select>
+              </label>
+              <label class="check" id="cropTurnBox"><input type="checkbox" id="cropTurn" checked> Turn it to fit the paper</label>
+              <label class="check"><input type="checkbox" id="cropAll" checked> Same crop on every page</label>
+              <label class="check" id="cropOnlyBox"><input type="checkbox" id="cropOnly"> Only save the pages I cropped</label>
+            </div>
+          </div>
+          <div class="cropmain">
+            <div class="croppager">
+              <button class="icon" id="cropPrev" aria-label="Previous page">&#8592;</button>
+              <span id="cropPageNo" class="small"></span>
+              <button class="icon" id="cropNext" aria-label="Next page">&#8594;</button>
+              <span class="muted small" id="cropSize"></span>
+            </div>
+            <div class="cropstage" id="cropStage">
+              <div class="cropbox" id="cropBox">
+                <span data-h="nw"></span><span data-h="n"></span><span data-h="ne"></span><span data-h="e"></span>
+                <span data-h="se"></span><span data-h="s"></span><span data-h="sw"></span><span data-h="w"></span>
+              </div>
+            </div>
+            <div class="note">Drag on the page to draw a box. Drag the box to move it, or its edges and corners to resize it.</div>
+          </div>
+        </div>
+        <div class="actions"><button class="primary" id="cropGo">Save cropped PDF</button></div>
       </div>
     </section>
 
