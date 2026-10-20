@@ -26,7 +26,7 @@ Click the PDFGeek icon and a PDFGeek tab opens with these tools:
 
 ## Install
 
-Pick the download for your browser from the [latest release](https://github.com/techygeekshome/PDFGeek/releases/latest).
+Pick the download for your browser from the [latest release](https://github.com/techygeekshome/PDFGeekExtension/releases/latest).
 
 | Browser | Download |
 |---|---|
